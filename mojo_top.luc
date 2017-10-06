@@ -1,0 +1,325 @@
+// This project uses the IO-Shield base project.
+// New files: stateCounter.luc, MHP constraints.ucf
+// Modified files: mojo_top.luc, seven_seg.luc
+// Our additions to the file are marked as NEW.
+
+// Default IOs were left unchanged.
+module mojo_top (
+    input clk,              // 50MHz clock
+    input rst_n,            // reset button (active low)
+    output led [8],         // 8 user controllable LEDs
+    input cclk,             // configuration clock, AVR ready when high
+    output spi_miso,        // AVR SPI MISO
+    input spi_ss,           // AVR SPI Slave Select
+    input spi_mosi,         // AVR SPI MOSI
+    input spi_sck,          // AVR SPI Clock
+    output spi_channel [4], // AVR general purpose pins (used by default to select ADC channel)
+    input avr_tx,           // AVR TX (FPGA RX)
+    output avr_rx,          // AVR RX (FPGA TX)
+    input avr_rx_busy,      // AVR RX buffer full
+    
+    output io_led [3][8],   // LEDs on IO Shield
+    output io_seg [8],      // 7-segment LEDs on IO Shield
+    output io_sel [4],      // Digit select on IO Shield
+    input io_button [5],    // 5 buttons on IO Shield
+    input io_dip [3][8],     // DIP switches on IO Shield
+    
+    // NEW, IOs are defined here: outputs a, b, and cin, and inputs sum and cout.
+    output a,
+    output b,
+    output cin,
+    input sum,
+    input cout
+    
+  ) { 
+   
+  sig rst;                  // reset signal
+  
+  .clk(clk) {
+    // The reset conditioner is used to synchronize the reset signal to the FPGA
+    // clock. This ensures the entire FPGA comes out of reset at the same time.
+    reset_conditioner reset_cond;
+    
+    edge_detector edge_detector (#RISE(1), #FALL(0));
+    
+    .rst(rst) {
+      multi_seven_seg seg;
+      multi_dec_ctr dec_ctr;
+      counter ctr (#SIZE(1), #DIV(24));
+    }
+  }
+  
+  
+  // NEW, here we define a finite state machine (FSM) with 11 states,
+  // including one idle state, eight test states, a fail and a success
+  // state. A stateCounter, instantiated as sc, will also be used later
+  // as a counter that ticks in the seconds range.
+  fsm state(.clk(clk)) = {IDLE, TEST1, TEST2, TEST3, TEST4, TEST5, TEST6, TEST7, TEST8, FAIL, SUCCESS};
+  stateCounter sc(.clk(clk),.rst(rst));
+  
+  always {
+  
+    // Default file unchanged.
+    reset_cond.in = ~rst_n;   // input raw inverted reset signal
+    rst = reset_cond.out;     // conditioned reset
+    
+    led = c{3b0, io_button};  // connect buttons to LEDs
+    spi_miso = bz;            // not using SPI
+    spi_channel = bzzzz;      // not using flags
+    avr_rx = bz;              // not using serial port
+    edge_detector.in = ctr.value;
+    dec_ctr.inc = edge_detector.out;
+    
+    // NEW, default the segments to display zeroes.
+    seg.values = {4h0, 4h0, 4h0, 4h0};
+    
+    io_seg = ~seg.seg; // connect segments to the driver
+    io_sel = ~seg.sel; // connect digit select to the driver
+    io_led = io_dip;   // connect the DIP switches to the LEDs
+    
+    // NEW, here we use a case() to evaluate if state.q is not 0,
+    // if it is not 0, then the states will be evaluated.       
+    case (state.q) {
+      
+      
+      // NEW, the default state is this idle state. If the center
+      // button on the shield io_button[1] is pressed, the testing
+      // states begin the cycle, starting at state TEST1.
+      // An explanation of the states is included only in TEST1,
+      // as all of them are similar.
+      
+      state.IDLE:
+            
+        if(io_button[1]) {
+          state.d = state.TEST1;
+        }
+      
+      // TEST ONE: 000
+      state.TEST1:
+      
+        a = 0;
+        b = 0;
+        cin = 0;
+        
+        // Here, we write to the leftmost of the three LED arrays
+        // to show which test state is currently active.
+        io_led[2][7] = 1;
+        
+        // The last three digits of the display will then show the
+        // values of the inputs of a, b and cin respectively.
+        seg.values = {4h0, 4h0, 4h0, 4h0};
+        
+        // We check if the correct outputs of the full-adder
+        // are fed as correct inputs to the FPGA. If so, and only on
+        // a counter tick, we change the state to TEST2.
+        
+        if (sum == 0 && cout == 0 && sc.inc_state == 1) {
+          state.d = state.TEST2;
+        }
+          
+        // If the inputs to the FPGA sum and cin are not correct,
+        // we wait for a clock tick, and change the state to FAIL.
+        
+        else if (sum != 0 && cout != 0 && sc.inc_state == 1) {
+          state.d = state.FAIL;
+        }
+        
+        // We allow for the RESET button to be pressed, which
+        // will set the state back to IDLE.
+        
+        if (rst_n == 0) {
+          state.d = state.IDLE;
+        }
+
+   
+      // TEST TWO: 001
+      state.TEST2:
+        a = 0;
+        b = 0;
+        cin = 1;
+        
+        io_led[2][6] = 1;
+        seg.values = {4h0, 4h0, 4h0, 4h1};
+
+        
+        if (sum == 1 && cout == 0 && sc.inc_state == 1) {
+          state.d = state.TEST3;
+        }
+        
+        else if (sum != 1 && cout != 0 && sc.inc_state == 1) {
+          state.d = state.FAIL;
+        }
+        
+        if(rst_n == 0) {
+          state.d = state.IDLE;
+        }
+        
+      // TEST THREE: 010
+      state.TEST3:
+        a = 0;
+        b = 1;
+        cin = 0;
+        
+        io_led[2][5] = 1;
+        seg.values = {4h0, 4h0, 4h1, 4h0};
+        
+        if (sum == 1 && cout == 0 && sc.inc_state == 1) {
+          state.d = state.TEST4;
+        }
+         
+        else if (sum != 1 && cout != 0 && sc.inc_state == 1) {
+          state.d = state.FAIL;
+        }
+        
+        if(rst_n == 0) {
+          state.d = state.IDLE;
+        }
+        
+      // TEST FOUR: 011 
+      state.TEST4:
+        a = 0;
+        b = 1;
+        cin = 1;
+        
+        io_led[2][4] = 1;
+        seg.values = {4h0, 4h0, 4h1, 4h1};
+        
+        if (sum == 0 && cout == 1 && sc.inc_state == 1) {
+          state.d = state.TEST5;
+        }
+         
+        else if (sum != 0 && cout != 1 && sc.inc_state == 1) {
+          state.d = state.FAIL;
+        }
+        
+        if(rst_n == 0) {
+          state.d = state.IDLE;
+        }
+     
+      // TEST FIVE: 100
+      state.TEST5:
+        a = 1;
+        b = 0;
+        cin = 0;
+        
+        io_led[2][3] = 1;
+        seg.values = {4h0, 4h1, 4h0, 4h0};
+        
+        if (sum == 1 && cout == 0 && sc.inc_state == 1) {
+          state.d = state.TEST6;
+        }
+         
+        else if (sum != 1 && cout != 0 && sc.inc_state == 1) {
+          state.d = state.FAIL;
+        }
+        
+        if(rst_n == 0) {
+          state.d = state.IDLE;
+        }
+        
+        
+      // TEST SIX: 101
+      state.TEST6:
+        a = 1;
+        b = 0;
+        cin = 1;
+        
+        io_led[2][2] = 1;
+        seg.values = {4h0, 4h1, 4h0, 4h1};
+        
+        if (sum == 0 && cout == 1 && sc.inc_state == 1) {
+          state.d = state.TEST7;
+        }
+         
+        else if (sum != 0 && cout != 1 && sc.inc_state == 1) {
+          state.d = state.FAIL;
+        }
+        
+        if(rst_n == 0) {
+          state.d = state.IDLE;
+        }
+        
+      // TEST SEVEN: 110
+      state.TEST7:
+        a = 1;
+        b = 1;
+        cin = 0;
+        
+        io_led[2][1] = 1;
+        seg.values = {4h0, 4h1, 4h1, 4h0};
+        
+        if (sum == 0 && cout == 1 && sc.inc_state == 1) {
+          state.d = state.TEST8;
+        }
+         
+        else if (sum != 0 && cout != 1 && sc.inc_state == 1) {
+          state.d = state.FAIL;
+        }
+        
+        if(rst_n == 0) {
+          state.d = state.IDLE;
+        }
+        
+      // TEST EIGHT: 111
+      state.TEST8:
+        a = 1;
+        b = 1;
+        cin = 1;
+        
+        io_led[2][0] = 1;
+        seg.values = {4h0, 4h1, 4h1, 4h1};
+        
+        if (sum == 1 && cout == 1 && sc.inc_state == 1) {
+          state.d = state.SUCCESS;
+        }
+         
+        else if (sum != 1 && cout != 1 && sc.inc_state == 1) {
+          state.d = state.FAIL;
+        }
+        
+        if(rst_n == 0) {
+          state.d = state.IDLE;
+        }
+      
+      // The state fail indicates that a wrong sum or cout has been
+      // detected.      
+      state.FAIL:
+        
+        // On a counter tick, display the letters 'FAIL',
+        // and blink all the LED arrays.
+        
+        if (sc.inc_state == 1) {
+          seg.values = {4ha,4hb,4hc,4hd};
+          io_led = 3x{{8hff}};
+        }
+        
+        seg.values = {4ha,4hb,4hc,4hd};
+        
+        // Allow the RESET button to be pressed setting the
+        // state back to IDLE.
+        
+        if (rst_n == 0) {
+          state.d = state.IDLE;
+        }
+      
+      // The state SUCCESS indicates that all eight tests have
+      // been passed, and the sums and couts of all the tests
+      // are verified correct.
+      state.SUCCESS:
+      
+        // On a counter tick, display the letters 'SUCC',
+        // and blink all the LED arrays.
+        
+        if (sc.inc_state == 1) {
+          seg.values = {4h5,4he,4hf,4hf};
+          io_led = 3x{{8hff}};
+        }
+        
+        seg.values = {4h5,4he,4hf,4hf};
+        
+        if (rst_n == 0) {
+          state.d = state.IDLE;
+        }
+      }
+    }
+}    

@@ -1,0 +1,31 @@
+// This file defines a 28-bit wide D flip-flop.
+// This allows the clk, oscillating at 50MHz, to be used as a counter
+// that ticks with a usable time (in the seconds range).
+//
+// This module works by incrementing the Q output of the flip-flop
+// by 1 every time the clk ticks (so there are 50 million increments
+// per second), then assigning the incremented value to the D input.
+// For example: d = 0000...000 + 1 = 0000...001, 50 million times per second.
+//
+// The most significant bit (MSB) of the D input changes at the halfway mark
+// when d = 1000...000, so we reset this MSB to 0, to avoid returning
+// an output of 1 every single time the MSB of d is 1, following this change.
+
+module stateCounter (
+    input clk,  // clock
+    input rst,  // reset
+    output inc_state
+ 
+  ) {
+
+  dff stateCounter[28](.clk(clk));
+  
+  always {
+    inc_state = stateCounter.q[27]; // MSB of stateCounter.q, so inc_state set to 1 every overflow which is every rising edge.
+    stateCounter.d = stateCounter.q + 1;
+    if (stateCounter.q[27]==1) {
+      stateCounter.d[27] = 0;
+    } 
+    
+  }
+}
