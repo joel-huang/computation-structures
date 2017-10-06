@@ -1,5 +1,5 @@
 module decimal_counter (
-    input clk,      // clock
+    input clk,    
     input rst,      // reset
     input inc,      // increment the counter
     output ovf,     // counter overflowed
