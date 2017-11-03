@@ -1,0 +1,167 @@
+.include "C:\Users\Joel\Desktop\jsim\50002\nominal.jsim"
+.include "C:\Users\Joel\Desktop\jsim\50002\stdcell.jsim"
+.include "C:\Users\Joel\Desktop\jsim\50002\2dcheckoff_3ns.jsim"
+
+* The pre-computation cell takes in A and B, and returns P and G.
+* P = A xor B (A + B WILL propagate if an input carry WILL cause a carry)
+* G = A and B (A + B WILL generate if their addition will ALWAYS carry)
+.subckt precomp pA pB pP pG
+Xprecompand pA pB pG and2
+Xprecompxor pA pB pP xor2
+.ends
+
+.subckt precompgrey A B Gin G P Gout
+Xprecompnand A B iG nand2
+Xprecompxor A B P xor2
+Xgreynand1 P Gin 1 nand2
+Xgreynand2 1 iG Gout nand2
+Xgreyinv iG G inverter
+.ends
+
+.subckt precompblack A B Gin Pin G P Gout Pout
+Xprecompnand A B iG nand2
+Xprecompxor A B P xor2
+Xblacknand1 P Gin 1 nand2
+Xblacknand2 1 iG Gout nand2
+Xblackinv iG G inverter
+Xpcomp P Pin Pout and2
+.ends
+
+* Black cells accept 4 args, Gi, Pi, Gj, and Pj.
+* Black cells return G and P, the generate and propagate bits.
+* Since G = Gi OR (Pi AND Gj), by DeMorgan's Law,
+* G = inv(inv(Gi) AND inv(Pi AND Gj))
+* G = inv(Gi) NAND (Pi NAND Gj)
+.subckt black Gi Pi Gj Pj G P
+*Xinv1 Gi invGi inverter
+*XBnand1 Pi Gj PinandGj nand2
+*XBnand2 invGi PinandGj G nand2
+XBand Pi Pj P and2
+XBand2 Pi Gj 1 and2
+XBor Gi 1 G or2
+.ends
+
+* Grey cells accept 3 args, Gi, Pi, and Gj.
+* Grey cells return G, the generate bit.
+.subckt grey Gi Pi Gj G
+Xinv1 Gi invGi inverter
+XGnand1 Pi Gj PinandGj nand2
+XGnand2 invGi PinandGj G nand2
+
+*XBand2 Pi Gj 1 and2
+*XBor Gi 1 G or2
+.ends
+
+.subckt merge X Y
+.connect X Y
+.ends
+
+.subckt adder32 ALUFN A[31:0] B[31:0] S[31:0] Z V N
+
+XinvB B[31:0] Binv[31:0] inverter
+XselB ALUFN#32 B[31:0] Binv[31:0] XB[31:0] mux2
+*Xxb ALUFN#32 B[31:0] XB[31:0] xor2
+
+* Generate P and G for [31:1], no need for [0]
+XadderPG A[31:2] XB[31:2] P[31:2] G[31:2] precomp
+*XadderPG A[31:4] XB[31:4] P[31:4] G[31:4] precomp
+*XadderPG2 A[2] XB[2] P[2] G[2] precomp
+
+* Prepare G[0]
+Xpng0 A[0] XB[0] P[0] preG precomp
+Xprep preG P[0] ALUFN G[0] grey
+
+*Stage 1
+XStage1bit0 G[0] S5G[0] merge
+*XStage1bit1 G[1] P[1] G[0] S1G[1] grey
+Xprecompgrey1 A[1] XB[1] G[0] G[1] P[1] S1G[1] precompgrey
+XStage1bit2 G[2] S1G[2] merge
+XStage1bit3 G[3] P[3] G[2] P[2] S1G[3] S1P[3] black
+*Xprecompblack3 A[3] XB[3] G[2] P[2] G[3] P[3] S1G[3] S1P[3] precompblack
+XStage1bit4 G[4] S1G[4] merge
+XStage1bit5 G[5] P[5] G[4] P[4] S1G[5] S1P[5] black
+XStage1bit6 G[6] S1G[6] merge
+XStage1bit7 G[7] P[7] G[6] P[6] S1G[7] S1P[7] black
+XStage1bit8 G[8] S1G[8] merge
+XStage1bit9 G[9] P[9] G[8] P[8] S1G[9] S1P[9] black
+XStage1bitA G[10] S1G[10] merge
+XStage1bitB G[11] P[11] G[10] P[10] S1G[11] S1P[11] black
+XStage1bitC G[12] S1G[12] merge
+XStage1bitD G[13] P[13] G[12] P[12] S1G[13] S1P[13] black
+XStage1bitE G[14] S1G[14] merge
+XStage1bitF G[15] P[15] G[14] P[14] S1G[15] S1P[15] black
+XStage1bitG G[16] S1G[16] merge
+XStage1bitH G[17] P[17] G[16] P[16] S1G[17] S1P[17] black
+XStage1bitI G[18] S1G[18] merge
+XStage1bitJ G[19] P[19] G[18] P[18] S1G[19] S1P[19] black
+XStage1bitK G[20] S1G[20] merge
+XStage1bitL G[21] P[21] G[20] P[20] S1G[21] S1P[21] black
+XStage1bitM G[22] S1G[22] merge
+XStage1bitN G[23] P[23] G[22] P[22] S1G[23] S1P[23] black
+XStage1bitO G[24] S1G[24] merge
+XStage1bitP G[25] P[25] G[24] P[24] S1G[25] S1P[25] black
+XStage1bitQ G[26] S1G[26] merge
+XStage1bitR G[27] P[27] G[26] P[26] S1G[27] S1P[27] black
+XStage1bitS G[28] S1G[28] merge
+XStage1bitT G[29] P[29] G[28] P[28] S1G[29] S1P[29] black
+XStage1bitU G[30] S1G[30] merge
+XStage1bitV G[31] P[31] G[30] P[30] S1G[31] S1P[31] black
+
+*Stage 2
+XStage2group0A S1G[1] S5G[1] merge
+XStage2group1 S1G[3:2] S1P[3] P[2] S1G[1]#2 S2G[3:2] grey
+XStage2group2 S1G[5:4] S2G[5:4] merge
+XStage2group3 S1G[7:6] S1P[7] P[6] S1G[5]#2 S1P[5]#2 S2G[7:6] S2P[7:6] black
+XStage2group4 S1G[9:8] S2G[9:8] merge
+XStage2group5 S1G[11:10] S1P[11] P[10] S1G[9]#2 S1P[9]#2 S2G[11:10] S2P[11:10] black
+XStage2group6 S1G[13:12] S2G[13:12] merge
+XStage2group7 S1G[15:14] S1P[15] P[14] S1G[13]#2 S1P[13]#2 S2G[15:14] S2P[15:14] black
+XStage2group8 S1G[17:16] S2G[17:16] merge
+XStage2group9 S1G[19:18] S1P[19] P[18] S1G[17]#2 S1P[17]#2 S2G[19:18] S2P[19:18] black
+XStage2groupA S1G[21:20] S2G[21:20] merge
+XStage2groupB S1G[23:22] S1P[23] P[22] S1G[21]#2 S1P[21]#2 S2G[23:22] S2P[23:22] black
+XStage2groupC S1G[25:24] S2G[25:24] merge
+XStage2groupD S1G[27:26] S1P[27] P[26] S1G[25]#2 S1P[25]#2 S2G[27:26] S2P[27:26] black
+XStage2groupE S1G[29:28] S2G[29:28] merge
+XStage2groupF S1G[31:30] S1P[31] P[30] S1G[29]#2 S1P[29]#2 S2G[31:30] S2P[31:30] black
+
+*Stage 3
+XStage3group0B S2G[3:2] S5G[3:2] merge
+XStage3group1 S2G[7:4] S2P[7:6] S1P[5] P[4] S2G[3]#4 S3G[7:4] grey
+XStage3group2 S2G[11:8] S3G[11:8] merge
+XStage3group3 S2G[15:12] S2P[15:14] S1P[13] P[12] S2G[11]#4 S2P[11]#4 S3G[15:12] S3P[15:12] black
+XStage3group4 S2G[19:16] S3G[19:16] merge
+XStage3group5 S2G[23:20] S2P[23:22] S1P[21] P[20] S2G[19]#4 S2P[19]#4 S3G[23:20] S3P[23:20] black
+XStage3group6 S2G[27:24] S3G[27:24] merge
+XStage3group7 S2G[31:28] S2P[31:30] S1P[29] P[28] S2G[27]#4 S2P[27]#4 S3G[31:28] S3P[31:28] black
+
+*Stage 4
+XStage4group0D S3G[7:4] S5G[7:4] merge
+XStage4group1 S3G[15:8] S3P[15:12] S2P[11:10] S1P[9] P[8] S3G[7]#8 S4G[15:8] grey
+XStage4group2 S3G[23:16] S4G[23:16] merge
+XStage4group3 S3G[31:24] S3P[31:28] S2P[27:26] S1P[25] P[24] S3G[23]#8 S3P[23]#8 S4G[31:24] S4P[31:24] black
+
+*Stage 5
+XStage5group0H S4G[15:8] S5G[15:8] merge
+XStage5group1 S4G[31:16] S4P[31:24] S3P[23:20] S2P[19:18] S1P[17] P[16] S4G[15]#16 S5G[31:16] grey
+
+Xsum0 P[0] ALUFN S[0] xor2
+Xsum P[31:1] S5G[30:0] S[31:1] xor2
+
+* Z signal
+XZorCascade S[7:0] S[15:8] S[23:16] S[31:24] w[7:0] nor4
+X4AndCascade w[7:6] w[5:4] w[3:2] w[1:0] int[1:0] nand4
+XFinalZ int1 int0 Z nor2
+
+* V signal
+XnotS31 S[31] ns31 inverter
+XnotA31 A[31] na31 inverter
+XnotXB31 XB[31] nxb31 inverter
+XVckt1 A[31] XB[31] ns31 vp1 nand3
+XVckt2 na31 nxb31 S[31] vp2 nand3
+XVckt vp1 vp2 V nand2
+
+* N signal
+.connect S[31] N
+
+.ends

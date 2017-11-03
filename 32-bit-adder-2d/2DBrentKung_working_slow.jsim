@@ -1,0 +1,166 @@
+.include "C:\Users\Joel\Desktop\jsim\50002\nominal.jsim"
+.include "C:\Users\Joel\Desktop\jsim\50002\stdcell.jsim"
+.include "C:\Users\Joel\Desktop\jsim\50002\2dcheckoff_3ns.jsim"
+
+.subckt precomp pA pB pP pG
+Xprecompand pA pB pG and2
+Xprecompxor pA pB pP xor2
+.ends
+
+* Black cells accept 4 args, Gi, Pi, Gj, and Pj.
+* Black cells return G and P, the generate and propagate bits.
+* Since G = Gi OR (Pi AND Gj), by DeMorgan's Law,
+* G = inv(inv(Gi) AND inv(Pi AND Gj))
+* G = inv(Gi) NAND (Pi NAND Gj)
+.subckt black Gi Pi Gj Pj G P
+Xinv1 Gi invGi inverter
+XBnand1 Pi Gj PinandGj nand2
+XBnand2 invGi PinandGj G nand2
+XBand Pi Pj P and2
+*XBand2 Pi Gj 1 and2
+*XBor Gi 1 G or2
+.ends
+
+* Grey cells accept 3 args, Gi, Pi, and Gj.
+* Grey cells return G, the generate bit.
+.subckt grey Gi Pi Gj G
+Xinv1 Gi invGi inverter
+XGnand1 Pi Gj PinandGj nand2
+XGnand2 invGi PinandGj G nand2
+.ends
+
+.subckt merge X Y
+.connect X Y
+.ends
+
+.subckt adder32 ALUFN A[31:0] B[31:0] S[31:0] Z V N
+
+XinvB B[31:0] Bi[31:0] inverter
+XselB ALUFN#32 B[31:0] Bi[31:0] XB[31:0] mux2
+
+Xprecompute A[31:0] XB[31:0] P[32:1] G[32:1] precomp
+.connect ALUFN S9G[0]
+.connect 0 P[0]
+
+*Stage 1
+
+XStage1bit1 G[1] P[1] S9G[0] S1G[1] grey
+XStage1bit3 G[3] P[3] G[2] P[2] S1G[3] S1P[3] black
+XStage1bit5 G[5] P[5] G[4] P[4] S1G[5] S1P[5] black
+XStage1bit7 G[7] P[7] G[6] P[6] S1G[7] S1P[7] black
+XStage1bit9 G[9] P[9] G[8] P[8] S1G[9] S1P[9] black
+XStage1bit11 G[11] P[11] G[10] P[10] S1G[11] S1P[11] black
+XStage1bit13 G[13] P[13] G[12] P[12] S1G[13] S1P[13] black
+XStage1bit15 G[15] P[15] G[14] P[14] S1G[15] S1P[15] black
+XStage1bit17 G[17] P[17] G[16] P[16] S1G[17] S1P[17] black
+XStage1bit19 G[19] P[19] G[18] P[18] S1G[19] S1P[19] black
+XStage1bit21 G[21] P[21] G[20] P[20] S1G[21] S1P[21] black
+XStage1bit23 G[23] P[23] G[22] P[22] S1G[23] S1P[23] black
+XStage1bit25 G[25] P[25] G[24] P[24] S1G[25] S1P[25] black
+XStage1bit27 G[27] P[27] G[26] P[26] S1G[27] S1P[27] black
+XStage1bit29 G[29] P[29] G[28] P[28] S1G[29] S1P[29] black
+XStage1bit31 G[31] P[31] G[30] P[30] S1G[31] S1P[31] black
+
+*Stage 2
+
+Xstage2bit3 S1G[3] S1P[3] S1G[1] S2G[3] grey
+XStage2bit7 S1G[7] S1P[7] S1G[5] S1P[5] S2G[7] S2P[7] black
+XStage2bit11 S1G[11] S1P[11] S1G[9] S1P[9] S2G[11] S2P[11] black
+XStage2bit15 S1G[15] S1P[15] S1G[13] S1P[13] S2G[15] S2P[15] black
+XStage2bit19 S1G[19] S1P[19] S1G[17] S1P[17] S2G[19] S2P[19] black
+XStage2bit23 S1G[23] S1P[23] S1G[21] S1P[21] S2G[23] S2P[23] black
+XStage2bit27 S1G[27] S1P[27] S1G[25] S1P[25] S2G[27] S2P[27] black
+XStage2bit31 S1G[31] S1P[31] S1G[29] S1P[29] S2G[31] S2P[31] black
+
+*Stage 3
+
+XStage3bit7 S2G[7] S2P[7] S2G[3] S3G[7] grey
+XStage3bit15 S2G[15] S2P[15] S2G[11] S2P[11] S3G[15] S3P[15] black
+XStage3bit23 S2G[23] S2P[23] S2G[19] S2P[19] S3G[23] S3P[23] black
+XStage3bit31 S2G[31] S2P[31] S2G[27] S2P[27] S3G[31] S3P[31] black
+
+*Stage 4
+
+XStage4bit15 S3G[15] S3P[15] S3G[7] S4G[15] grey
+XStage4bit31 S3G[31] S3P[31] S3G[23] S3P[23] S4G[31] S4P[31] black
+
+*Stage 5
+
+XStage5bit31 S4G[31] S4P[31] S4G[15] S5G[31] grey
+
+*Stage 6
+
+XStage6bit23 S3G[23] S3P[23] S4G[15] S6G[23] grey
+
+*Stage 7
+
+XStage7bit11 S2G[11] S2P[11] S3G[7] S7G[11] grey
+XStage7bit19 S2G[19] S2P[19] S4G[15] S7G[19] grey
+XStage7bit27 S2G[27] S2P[27] S6G[23] S7G[27] grey
+
+*Stage 8
+
+XStage8bit5 S1G[5] S1P[5] S2G[3] S8G[5] grey
+XStage8bit9 S1G[9] S1P[9] S3G[7] S8G[9] grey
+XStage8bit13 S1G[13] S1P[13] S7G[11] S8G[13] grey
+XStage8bit17 S1G[17] S1P[17] S4G[15] S8G[17] grey
+XStage8bit21 S1G[21] S1P[21] S7G[19] S8G[21] grey
+XStage8bit25 S1G[25] S1P[25] S6G[23] S8G[25] grey
+XStage8bit29 S1G[29] S1P[29] S7G[27] S8G[29] grey
+
+*Stage 9
+
+XStage9bit2 G[2] P[2] S1G[1] S9G[2] grey
+XStage9bit4 G[4] P[4] S2G[3] S9G[4] grey
+XStage9bit6 G[6] P[6] S8G[5] S9G[6] grey
+XStage9bit8 G[8] P[8] S3G[7] S9G[8] grey
+XStage9bit10 G[10] P[10] S8G[9] S9G[10] grey
+XStage9bit12 G[12] P[12] S7G[11] S9G[12] grey
+XStage9bit14 G[14] P[14] S8G[13] S9G[14] grey
+XStage9bit16 G[16] P[16] S4G[15] S9G[16] grey
+XStage9bit18 G[18] P[18] S8G[17] S9G[18] grey
+XStage9bit20 G[20] P[20] S7G[19] S9G[20] grey
+XStage9bit22 G[22] P[22] S8G[21] S9G[22] grey
+XStage9bit24 G[24] P[24] S6G[23] S9G[24] grey
+XStage9bit26 G[26] P[26] S8G[25] S9G[26] grey
+XStage9bit28 G[28] P[28] S7G[27] S9G[28] grey
+XStage9bit30 G[30] P[30] S8G[29] S9G[30] grey
+
+XStage9bit1 S1G[1] S9G[1] merge
+XStage9bit3 S2G[3] S9G[3] merge
+XStage9bit5 S8G[5] S9G[5] merge
+XStage9bit7 S3G[7] S9G[7] merge
+XStage9bit9 S8G[9] S9G[9] merge
+XStage9bit11 S7G[11] S9G[11] merge
+XStage9bit13 S8G[13] S9G[13] merge
+XStage9bit15 S4G[15] S9G[15] merge
+XStage9bit17 S8G[17] S9G[17] merge
+XStage9bit19 S7G[19] S9G[19] merge
+XStage9bit21 S8G[21] S9G[21] merge
+XStage9bit23 S6G[23] S9G[23] merge
+XStage9bit25 S8G[25] S9G[25] merge
+XStage9bit27 S7G[27] S9G[27] merge
+XStage9bit29 S8G[29] S9G[29] merge
+XStage9bit31 S5G[31] S9G[31] merge
+XStage9bit32 G[32] P[32] S5G[31] S9G[32] grey
+
+Xsum P[32:1] S9G[31:0] S[31:0] xor2
+
+* Z signal
+XZorCascade S[7:0] S[15:8] S[23:16] S[31:24] w[7:0] nor4
+X4AndCascade w[7:6] w[5:4] w[3:2] w[1:0] int[1:0] nand4
+XFinalZ int1 int0 Z nor2
+
+* V signal
+XnotS31 S[31] ns31 inverter
+XnotA31 A[31] na31 inverter
+XnotXB31 XB[31] nxb31 inverter
+XVckt1 A[31] XB[31] ns31 vp1 nand3
+XVckt2 na31 nxb31 S[31] vp2 nand3
+XVckt vp1 vp2 V nand2
+
+* N signal
+.connect S[31] N
+
+
+.ends

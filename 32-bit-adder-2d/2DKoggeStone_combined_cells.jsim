@@ -1,0 +1,153 @@
+.include "C:\Users\Joel\Desktop\jsim\50002\nominal.jsim"
+.include "C:\Users\Joel\Desktop\jsim\50002\stdcell.jsim"
+.include "C:\Users\Joel\Desktop\jsim\50002\2dcheckoff_3ns.jsim"
+
+* The pre-computation cell takes in A and B, and returns P and G.
+* P = A xor B (A + B WILL propagate if an input carry WILL cause a carry)
+* G = A and B (A + B WILL generate if their addition will ALWAYS carry)
+.subckt precomp pA pB pP pG
+Xprecompand pA pB pG and2
+Xprecompxor pA pB pP xor2
+.ends
+
+.subckt precompgrey A B Gin G P Gout
+Xprecompnand A B iG nand2
+Xprecompxor A B P xor2
+Xgreynand1 P Gin 1 nand2
+Xgreynand2 1 iG Gout nand2
+Xgreyinv iG G inverter
+.ends
+
+.subckt precompblack A B Gin Pin G P Gout Pout
+Xprecompnand A B iG nand2
+Xprecompxor A B P xor2
+Xblacknand1 P Gin 1 nand2
+Xblacknand2 1 iG Gout nand2
+Xblackinv iG G inverter
+Xpcomp P Pin Pout and2
+.ends
+
+* precomp black box combined (Pj and Gj are from adjacent black box circuit)
+.subckt PCB A B Gj Pj Gi Pi G P
+Xnand1 A B Gi nand2
+Xxnor1 A B Pi xnor2
+Xnand2 Pi Gj h nand2
+Xinv1 h invG inverter_2
+Xnand3 Gi invG G nand2
+Xnand4 Pi Pj P nand2
+.ends
+
+* Black cells accept 4 args, Gi, Pi, Gj, and Pj.
+* Black cells return G and P, the generate and propagate bits.
+* Since G = Gi OR (Pi AND Gj), by DeMorgan's Law,
+* G = inv(inv(Gi) AND inv(Pi AND Gj))
+* G = inv(Gi) NAND (Pi NAND Gj)
+.subckt black Gi Pi Gj Pj G P
+*XBinv Gi invGi inverter
+*XBnand1 Pi Gj PinandGj nand2
+*XBnand2 invGi PinandGj G nand2
+
+XBand Pi Pj P and2
+
+XB0 Pi Gj 1 and2
+XB1 Gi 1 G or2
+.ends
+
+* Grey cells accept 3 args, Gi, Pi, and Gj.
+* Grey cells return G, the generate bit.
+.subckt grey Gi Pi Gj G
+XGinv Gi invGi inverter
+XGnand1 Pi Gj PinandGj nand2
+XGnand2 invGi PinandGj G nand2
+*XGreyand Pi Gj first and2
+*XGreyor first Gi G or2
+
+
+.ends
+
+.subckt merge X Y
+.connect X Y
+.ends
+
+.subckt adder32 ALUFN A[31:0] B[31:0] S[31:0] Z V N
+
+* Invert A and B for use with inverting logic
+XinvB B[31:0] Bi[31:0] inverter
+XselB ALUFN#32 B[31:0] Bi[31:0] XB[31:0] mux2
+
+*Xxb ALUFN#32 B[31:0] XB[31:0] xor2
+
+
+
+* Generate P and G for [31:1], no need for [0]
+*XadderPG A[31:2] XB[31:2] P[31:2] G[31:2] precomp
+
+* Prepare G[0]
+Xpng0 A[0] XB[0] P[0] preG precomp
+Xprep preG P[0] ALUFN G[0] grey
+
+* 32-bit KSA has five horizontal stages.
+* Stage 1
+* Pass G[0] to Stage 1's G[0]
+XStage1conn G[0] S1G[0] merge
+
+* Pass G[1], P[1], and G[0] to Stage 1's G[1]
+* XStage1G G[1] P[1] G[0] S1G[1] grey
+* Replace precomp and grey block 1
+Xprecompgrey1 A[1] XB[1] G[0] G[1] P[1] S1G[1] precompgrey
+
+* Pass G[31:2], P[31:2], G[30:1], and P[30:1] to Stage 1's G[31:2] and P[31:2]
+* (Since the rest of the cells are black)
+*XStage1B G[31:2] P[31:2] G[30:1] P[30:1] S1G[31:2] S1P[31:2] black
+Xprecompblack1 A[31:2] XB[31:2] G[30:1] P[30:1] G[31:2] P[31:2] S1G[31:2] S1P[31:2] PCB
+
+* Stage 2
+* Pass Stage 1's G[1:0] to Stage 2's G[1:0]
+XStage2conn S1G[1:0] S2G[1:0] merge
+
+* Pass Stage 1's (G[3], P[3], G[1]) to Stage 2's G[3],
+* and Stage 1's (G[2], P[2], G[0]) to Stage 2's G[2]
+XStage2G S1G[3:2] S1P[3:2] S1G[1:0] S2G[3:2] grey
+
+* Pass Stage 1's G[31:4] and P[31:4] as Gi, Pi arguments
+* Pass Stage 1's G[29:2] and P[29:2] as Gj, Pj arguments
+* Return Stage 2's G[31:4] and P[31:4]
+XStage2B S1G[31:4] S1P[31:4] S1G[29:2] S1P[29:2] S2G[31:4] S2P[31:4] black
+
+* Similar logic follows for Stage 3, 4 and 5.
+
+* Stage 3
+XStage3conn S2G[3:0] S3G[3:0] merge
+XStage3G S2G[7:4] S2P[7:4] S2G[3:0] S3G[7:4] grey
+XStage3B S2G[31:8] S2P[31:8] S2G[27:4] S2P[27:4] S3G[31:8] S3P[31:8] black
+
+* Stage 4
+XStage4conn S3G[7:0] S4G[7:0] merge
+XStage4G S3G[15:8] S3P[15:8] S3G[7:0] S4G[15:8] grey
+XStage4B S3G[31:16] S3P[31:16] S3G[23:8] S3P[23:8] S4G[31:16] S4P[31:16] black
+
+* Stage 5
+XStage5conn S4G[15:0] S5G[15:0] merge
+XStage5G S4G[31:16] S4P[31:16] S4G[15:0] S5G[31:16] grey
+
+
+Xsum0 P[0] ALUFN S[0] xor2
+Xsum P[31:1] S5G[30:0] S[31:1] xor2
+
+* Z signal
+XZorCascade S[7:0] S[15:8] S[23:16] S[31:24] w[7:0] nor4
+X4AndCascade w[7:6] w[5:4] w[3:2] w[1:0] int[1:0] nand4
+XFinalZ int1 int0 Z nor2
+
+* V signal
+XnotS31 S[31] ns31 inverter
+XnotA31 A[31] na31 inverter
+XnotXB31 XB[31] nxb31 inverter
+XVckt1 A[31] XB[31] ns31 vp1 nand3
+XVckt2 na31 nxb31 S[31] vp2 nand3
+XVckt vp1 vp2 V nand2
+
+* N signal
+.connect S[31] N
+
+.ends
