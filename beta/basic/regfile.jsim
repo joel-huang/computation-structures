@@ -1,0 +1,35 @@
+*.include "../lib/nominal.jsim"
+*.include "../lib/stdcell.jsim"
+*.include "../lib/lab6regfile.jsim"
+
+.subckt regfile clk werf ra2sel ra[4:0] rb[4:0] rc[4:0] wdata[31:0] radata[31:0] rbdata[31:0]
+
+* Check if ra1 or ra2 = 111111
+XCHECK31_1 ra[4:0] isRa_31 check
+XCHECK31_2 ra2mux[4:0] isRbc_31 check
+
+XMUX_RA1 isRa_31#32 adata[31:0] 0#32 radata[31:0] mux2
+XMUX_RA2 isRbc_31#32 bdata[31:0] 0#32 rbdata[31:0] mux2
+
+* ra2sel
+* returns ra2mux to feed into RA2
+XMUX_RA2SEL ra2sel#5 rb[4:0] rc[4:0] ra2mux[4:0] mux2
+
+XREGFILE
++ vdd 0 0 ra[4:0] adata[31:0]     // A read port
++ vdd 0 0 ra2mux[4:0] bdata[31:0] // B read port
++ 0 clk werf rc[4:0] wdata[31:0]  // write port
++ $memory width=32 nlocations=31
+.ends
+
+* checking for 11111
+* returns 1 if true, 0 if false
+.subckt check reg[4:0] bool
+XCHECK31_AND4 reg[4:1] temp and4
+XCHECK31_AND2 reg[0] temp bool and2
+.ends
+
+* knex
+.subckt merge a b
+.connect a b
+.ends

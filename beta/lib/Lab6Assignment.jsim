@@ -1,0 +1,10 @@
+.include "/50002/nominal.jsim"
+.include "/50002/stdcell.jsim"
+.include "/50002/lab6pc.jsim"
+.include "/50002/Lab 3 Checkoff_test.jsim"
+
+.subckt pc clk reset reg_out[31:0]
+XPCMUX reset#32 pc_plus_4[31:0] 0#32 pc_mux_out[31:0] mux2
+XREG pc_mux_out[31:0] clk#32 reg_out[31:0] dreg
+XPC_PLUS4 reg_out[31:0] 0#29 vdd 0 0 pc_plus_4[31:0] adder32
+.ends

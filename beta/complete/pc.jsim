@@ -1,0 +1,42 @@
+*.include "../lib/nominal.jsim"
+*.include "../lib/stdcell.jsim"
+.include "../lib/alu.jsim"
+*.include "../lib/lab6pc.jsim"
+
+.subckt pc clk reset pcsel[2:0] xadr[31:0] illop[31:0] jt[31:0] c[15:0] ia[31:0] ia_plus4[31:0] ia_plus4_plusC[31:0]
+* If PC31=1, and JT31=1 then newPC31=1
+XPC31_UNCHANGED ia[31] jt[31] new_pc31 and2
+
+* These combine to give the 5-way PC MUX.
+* XMUX      s0          s1          d0             d1                           d2                   d3          out
+XPCMUX_4WAY pcsel[1]#32 pcsel[0]#32 ia_plus4[31:0] new_pc31 jt[30:2] 0#2 ia[31] ia_plus4_plusC[30:0] illop[31:0] mux_4_out[31:0] mux4
+* XMUX      s0          d0              d1         out
+XPCMUX_2WAY pcsel[2]#32 mux_4_out[31:0] xadr[31:0] pc_mux_out[31:0] mux2
+
+* The register to store the PC address.
+XREG pc_rst_out[31:0] clk#32 ia[31:0] dreg
+
+* The module to calculate PC+4.
+* Should not change the supervisor bit.
+* Make a 32-bit 4. Add with ia[31:0], then merge the two MSBs
+XCONST_4 0#29 vdd 0#2 CONST_4[31:0] merge_local
+XPC_PLUS4 ia[31:0] CONST_4[31:0] ia_plus4_unmerged[31:0] adder32_nozvn
+XMERGE_PLUS4 ia[31] ia_plus4_unmerged[30:0] ia_plus4[31:0] merge_local
+
+* The module to calculate PC+4+4*SEXT[c].
+* XSEXTC   a=pc+4         b=sext(c[15:0]<<2)   output
+XPC_4SEXTC ia_plus4[31:0] c[15]#14 c[15:0] 0#2 ia_plus4_plusC[31:0] adder32_nozvn
+
+* The module to reset.
+* XMUX     s0       d0               d1       out
+XPCMUX_RST reset#32 pc_mux_out[31:0] vdd 0#31 pc_rst_out[31:0] mux2
+.ends
+
+.subckt merge_local a b
+.connect a b
+.ends
+
+.subckt adder32_nozvn a[31:0] b[31:0] s[31:0]
+XFA_1 0 a[0] b[0] s[0] c[0] FA
+XFA_2 c[30:0] a[31:1] b[31:1] s[31:1] c[31:1] FA
+.ends

@@ -1,0 +1,55 @@
+.include "../lib/nominal.jsim"
+.include "../lib/stdcell.jsim"
+.include "pc.jsim"
+.include "regfile.jsim"
+.include "ctl.jsim"
+.include "../lib/lab6checkoff.jsim"
+
+.subckt beta clk reset irq ia[31:0] id[31:0] ma[31:0] moe mrd[31:0] wr mwd[31:0]
+* If PC31 is 0, and IRQ=1, interrupt occurs.
+* Generate ~PC31 to check if ~PC31*IRQ=1.
+XUSER_MODE ia[31] user_mode inverter
+XALLOW_IRQ irq user_mode interrupt and2
+
+* When interrupt=0, pcsel=xpcsel, when interrupt=1, pcsel=100
+* When interrupt=0, wasel=xwasel, when interrupt=1, wasel=1
+* When interrupt=0, werf=xwerf,   when interrupt=1, werf=1
+* When interrupt=0, wdsel=xwdsel, when interrupt=1, wdsel=0
+* When interrupt=0, wr=xwr,       when interrupt=1, wr=0
+* XMUX s0          d0          d1      out
+XPCSEL interrupt#3 xpcsel[2:0] vdd 0#2 pcsel[2:0] mux2 
+xWASEL interrupt   xwasel      vdd     wasel      mux2
+XWERF  interrupt   xwerf       vdd     werf       mux2
+XWDSEL interrupt#2 xwdsel[1:0] 0#2     wdsel[1:0] mux2
+XWR    interrupt   xwr         0       wr         mux2
+
+XXADR  vdd 0#27 vdd 0#3 xadr[31:0]  merge
+XILLOP vdd 0#28 vdd 0#2 illop[31:0] merge
+
+XMWD rbdata[31:0]  mwd[31:0] buffer
+XMA  alu_out[31:0] ma[31:0]  buffer
+
+*XRESET_WERF  reset   xwerf       vdd werf       mux2
+*XRESET_WDSEL reset#2 xwdsel[1:0] 0#2 wdsel[1:0] mux2
+
+* output the instruction address to instruction memory
+XPC clk reset pcsel[2:0] xadr[31:0] illop[31:0] jt[31:0] id[15:0] ia[31:0] ia_plus4[31:0] ia_plus4_plusC[31:0] pc
+XREGFILE clk werf ra2sel wasel id[20:16] id[15:11] id[25:21] wdata[31:0] radata[31:0] rbdata[31:0] regfile
+XCTL reset z irq id[31:26] xpcsel[2:0] xwasel asel ra2sel bsel alufn[5:0] xwdsel[1:0] xwerf moe xwr ctl
+
+* Z-logic and JT from radata[31:0]
+XOBTAIN_Z 0 radata[31:0] 0#32 discard[31:0] z useless[1:0] adder32
+XOBTAIN_JT radata[31:0] jt[31:0] merge
+
+* ASELMUX - bit 31 of branch-offset input set to 0
+* Supervisor bit is ignored when doing address computation for LDR
+XASELMUX asel#32 radata[31:0] 0 ia_plus4_plusC[30:0] alu_a[31:0] mux2
+* BSELMUX - chooses what goes in alu's B - bsel -> 0: rbdata, 1:sext[c]
+XBSELMUX bsel#32 rbdata[31:0] id[15]#16 id[15:0] alu_b[31:0] mux2
+
+XALU alufn[5:0] alu_a[31:0] alu_b[31:0] alu_out[31:0] unused[2:0] alu
+
+* WDSELMUX - chooses what to write to regfile - wdsel -> 0: PC+4 with Supervisor bit, 1: ALU out, 2: MEM read
+* XMUX    s0          s1          d0                    d1         d2           d3   out
+XWDSELMUX wdsel[1]#32 wdsel[0]#32 ia_plus4[31:0] mrd[31:0] alu_out[31:0] 0#32 wdata[31:0] mux4
+.ends

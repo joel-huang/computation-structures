@@ -1,0 +1,16 @@
+*.include "../lib/nominal.jsim"
+*.include "../lib/stdcell.jsim"
+.include "../lib/alu.jsim"
+*.include "../lib/lab6pc.jsim"
+
+.subckt pc clk reset ia[31:0]
+* The register to store the PC address.
+XREG pc_rst_out[31:0] clk#32 ia[31:0] dreg
+
+* The module to calculate PC+4.
+XPC_PLUS4 0 ia[31:0] 0#29 vdd 0#2 ia_plus4[31:0] unused1[2:0] adder32
+
+* The module to reset.
+* XMUX     s0       d0              d1   out
+XPCMUX_RST reset#32 ia_plus4[31:0] 0#32 pc_rst_out[31:0] mux2
+.ends

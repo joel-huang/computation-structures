@@ -1,0 +1,31 @@
+.include "../lib/nominal.jsim"
+.include "../lib/stdcell.jsim"
+.include "pc.jsim"
+.include "regfile.jsim"
+.include "ctl.jsim"
+.include "../lib/lab6basicblock.jsim"
+
+.subckt beta clk reset ia[31:0] id[31:0] ma[31:0] moe mrd[31:0] wr mwd[31:0]
+
+* output the instruction address to instruction memory
+XPC clk reset ia[31:0] pc
+
+XREGFILE clk werf ra2sel id[20:16] id[15:11] id[25:21] wdata[31:0] radata[31:0] rbdata[31:0] regfile
+
+XCTL reset id[31:26] ra2sel bsel alufn[5:0] xwdsel[1:0] xwerf moe wr ctl
+
+* BSELMUX - chooses what goes in alu's B - bsel -> 0: rbdata, 1:sext[c]
+XBSELMUX bsel#32 rbdata[31:0] id[15]#16 id[15:0] alu_b[31:0] mux2
+
+XALU alufn[5:0] radata[31:0] alu_b[31:0] alu_out[31:0] z v n alu
+
+XMWD rbdata[31:0] mwd[31:0] buffer
+XMA alu_out[31:0] ma[31:0] buffer
+
+Xwerf reset xwerf vdd werf mux2
+Xwdsel reset#2 xwdsel[1:0] 0#2 wdsel[1:0] mux2
+
+* WDSELMUX - chooses what to write to regfile - wdsel -> 0: nothing for now, 1: ALU out, 2: MEM read
+* XMUX    s0          s1          d0   d1         d2           d3   out
+XWDSELMUX wdsel[1]#32 wdsel[0]#32 0#32 mrd[31:0] alu_out[31:0] 0#32 wdata[31:0] mux4
+.ends

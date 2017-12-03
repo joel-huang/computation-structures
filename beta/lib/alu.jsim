@@ -1,0 +1,173 @@
+.subckt alu ALUFN[5:0] A[31:0] B[31:0] alu[31:0] z v n
+Xaluadder ALUFN[0] A[31:0] B[31:0] adderout[31:0] z v n adder32
+Xalubool ALUFN[3:0] A[31:0] B[31:0] boolout[31:0] boole32
+Xalushift ALUFN[1:0] A[31:0] B[4:0] shiftout[31:0] shift32
+Xalucmp ALUFN[2:1] z v n cmpout[31:0] compare32
+Xalumult A[31:0] B[31:0] multout[31:0] multiply32
+Xaddmultmux ALUFN[1]#32 ALUFN[0]#32 adderout[31:0] multout[31:0] adderout[31:0] 0#32 arithout[31:0] mux4
+Xalumux ALUFN[5]#32 ALUFN[4]#32 arithout[31:0] shiftout[31:0] boolout[31:0] cmpout[31:0] alu[31:0] mux4
+.ends
+
+* 1-bit full adder, takes in 1-bit A, 1-bit B, and 1-bit Cin,
+* returns 1-bit S and Cout.
+.subckt FA Cin A B S Cout
+XFAxor1 A B 1 xor2
+XFAxor2 Cin 1 S xor2
+XFAnand1 A B 2 nand2
+XFAnand2 B Cin 3 nand2
+XFAnand3 A Cin 4 nand2
+XFAnand4 2 3 4 Cout nand3
+.ends
+
+* 32 bit adder, takes in the last bit of the ALUFN (as ALUFN),
+* 32-bit A, 32-bit B, and generates 32-bit S, signals Z, V and N.
+.subckt adder32 ALUFN A[31:0] B[31:0] S[31:0] Z V N
+XAdderxor ALUFN#32 B[31:0] XB[31:0] xor2
+XAdderfa ALUFN A[0] XB[0] S[0] C[0] FA
+XAdderfa2 C[30:0] A[31:1] XB[31:1] S[31:1] C[31:1] FA
+
+* N is true when S[31] = 1
+XN S[31] N buffer
+
+* Z is true when all S = 0
+XZnor1 S[3:0] z1 nor4
+XZnor2 S[7:4] z2 nor4
+XZnor3 S[11:8] z3 nor4
+XZnor4 S[15:12] z4 nor4
+XZnor5 S[19:16] z5 nor4
+XZnor6 S[23:20] z6 nor4
+XZnor7 S[27:24] z7 nor4
+XZnor8 S[31:28] z8 nor4
+
+XZnor9 z1 z2 z3 z4 zA and4
+XZnorA z5 z6 z7 z8 zB and4
+XZnorB zA zB Z and2
+
+* V is (A31*B31*!S31)+(!A31*!B31*S31).
+* Vfirst and Vsecond are subcircuits defined below.
+XV1 A[31] XB[31] S[31] v1 Vfirst
+XV2 A[31] XB[31] S[31] v2 Vsecond
+XV v1 v2 V or2
+.ends
+
+* First part of the V equation.
+.subckt Vfirst XA XB S Z
+XVfinv S invS inverter
+XVfand XA XB invS Z and3
+.ends
+
+* Second part of the V equation.
+.subckt Vsecond XA XB S Z
+XVsinv1 XA invXA inverter
+XVsinv2 XB invXB inverter
+XVsand invXA invXB S Z and3
+.ends
+
+* 32-bit comparator, takes in ALUFN[2:1] as control signal,
+* Z, V, and N, and returns 32-bit cmp
+.subckt compare32 ALUFN[2:1] Z V N cmp[31:0]
+xcompzero cmp[31:1] constant0
+Xcompxor N V compxorout xor2
+Xcompor Z compxorout comporout or2
+xcompmux ALUFN[2] ALUFN[1] 0 compxorout Z comporout cmp[0] mux4
+.ends
+
+* 32-bit boole unit, multiplexed to give 1 of 4 possible functions
+.subckt boole32 ALUFN[3:0] A[31:0] B[31:0] boole[31:0]
+Xboolmux A[31:0] B[31:0] ALUFN[0]#32 ALUFN[1]#32 ALUFN[2]#32 ALUFN[3]#32 boole[31:0] mux4
+.ends
+
+* 32-bit shifter, takes in 32-bit A and 5-bit number B (to shift by)
+.subckt shift32 ALUFN[1:0] A[31:0] B[4:0] shift[31:0]
+Xshleft A[31:0] B[4:0] shl[31:0] 0 SHL
+Xshright A[31:0] B[4:0] shr[31:0] 0 SHR
+Xshrightx A[31:0] B[4:0] sra[31:0] A[31] SHR
+Xselshift ALUFN[1]#32 ALUFN[0]#32 shl[31:0] 0#32 shr[31:0] sra[31:0] shift[31:0] mux4
+.ends
+
+.subckt SHL A[31:0] B[4:0] out[31:0] T
+Xsl1 B[4]#32 A[31:0] A[15:0] T#16 sla[31:0] mux2
+Xsl2 B[3]#32 slA[31:0] slA[23:0] T#8 slB[31:0] mux2
+Xsl3 B[2]#32 slB[31:0] slB[27:0] T#4 slC[31:0] mux2
+Xsl4 B[1]#32 slC[31:0] slC[29:0] T#2 slD[31:0] mux2
+Xsl5 B[0]#32 slD[31:0] slD[30:0] T out[31:0] mux2
+.ends
+
+.subckt SHR A[31:0] B[4:0] out[31:0] T
+Xsr1 B[4]#32 A[31:0] T#16 A[31:16] srA[31:0] mux2
+Xsr2 B[3]#32 srA[31:0] T#8 srA[31:8] srB[31:0] mux2
+Xsr3 B[2]#32 srB[31:0] T#4 srB[31:4] srC[31:0] mux2
+Xsr4 B[1]#32 srC[31:0] T#2 srC[31:2] srD[31:0] mux2
+Xsr5 B[0]#32 srD[31:0] T srD[31:1] out[31:0] mux2
+.ends
+
+.subckt multiply32 A[31:0] B[31:0] multout[31:0]
+* Use Partial Product method
+* Multiply all bits of A with B0, then B1, ... till B31.
+* This section will yield all the individual rows of the partial product,
+* which are then summed in the next section.
+xmult0 A[0:31] B[0]#32 out0[0:31] and2
+xmult1 A[0:31] B[1]#32 out1[0:31] and2
+xmult2 A[0:31] B[2]#32 out2[0:31] and2
+xmult3 A[0:31] B[3]#32 out3[0:31] and2
+xmult4 A[0:31] B[4]#32 out4[0:31] and2
+xmult5 A[0:31] B[5]#32 out5[0:31] and2
+xmult6 A[0:31] B[6]#32 out6[0:31] and2
+xmult7 A[0:31] B[7]#32 out7[0:31] and2
+xmult8 A[0:31] B[8]#32 out8[0:31] and2
+xmult9 A[0:31] B[9]#32 out9[0:31] and2
+xmultA A[0:31] B[10]#32 outA[0:31] and2
+xmultB A[0:31] B[11]#32 outB[0:31] and2
+xmultC A[0:31] B[12]#32 outC[0:31] and2
+xmultD A[0:31] B[13]#32 outD[0:31] and2
+xmultE A[0:31] B[14]#32 outE[0:31] and2
+xmultF A[0:31] B[15]#32 outF[0:31] and2
+xmultG A[0:31] B[16]#32 outG[0:31] and2
+xmultH A[0:31] B[17]#32 outH[0:31] and2
+xmultI A[0:31] B[18]#32 outI[0:31] and2
+xmultJ A[0:31] B[19]#32 outJ[0:31] and2
+xmultK A[0:31] B[20]#32 outK[0:31] and2
+xmultL A[0:31] B[21]#32 outL[0:31] and2
+xmultM A[0:31] B[22]#32 outM[0:31] and2
+xmultN A[0:31] B[23]#32 outN[0:31] and2
+xmultO A[0:31] B[24]#32 outO[0:31] and2
+xmultP A[0:31] B[25]#32 outP[0:31] and2
+xmultQ A[0:31] B[26]#32 outQ[0:31] and2
+xmultR A[0:31] B[27]#32 outR[0:31] and2
+xmultS A[0:31] B[28]#32 outS[0:31] and2
+xmultT A[0:31] B[29]#32 outT[0:31] and2
+xmultU A[0:31] B[30]#32 outU[0:31] and2
+xmultV A[0:31] B[31]#32 outV[0:31] and2
+
+xaddmult0 0 out0[31:0] out1[30:0] 0 ans0[31:0] z0 v0 n0 adder32
+xaddmult1 0 ans0[31:0] out2[29:0] 0#2 ans1[31:0] z1 v1 n1 adder32
+xaddmult2 0 ans1[31:0] out3[28:0] 0#3 ans2[31:0] z2 v2 n2 adder32
+xaddmult3 0 ans2[31:0] out4[27:0] 0#4 ans3[31:0] z3 v3 n3 adder32
+xaddmult4 0 ans3[31:0] out5[26:0] 0#5 ans4[31:0] z4 v4 n4 adder32
+xaddmult5 0 ans4[31:0] out6[25:0] 0#6 ans5[31:0] z5 v5 n5 adder32
+xaddmult6 0 ans5[31:0] out7[24:0] 0#7 ans6[31:0] z6 v6 n6 adder32
+xaddmult7 0 ans6[31:0] out8[23:0] 0#8 ans7[31:0] z7 v7 n7 adder32
+xaddmult8 0 ans7[31:0] out9[22:0] 0#9 ans8[31:0] z8 v8 n8 adder32
+xaddmult9 0 ans8[31:0] outA[21:0] 0#10 ans9[31:0] z9 v9 n9 adder32
+xaddmultA 0 ans9[31:0] outB[20:0] 0#11 ansA[31:0] zA vA nA adder32
+xaddmultB 0 ansA[31:0] outC[19:0] 0#12 ansB[31:0] zB vB nB adder32
+xaddmultC 0 ansB[31:0] outD[18:0] 0#13 ansC[31:0] zC vC nC adder32
+xaddmultD 0 ansC[31:0] outE[17:0] 0#14 ansD[31:0] zD vD nD adder32
+xaddmultE 0 ansD[31:0] outF[16:0] 0#15 ansE[31:0] zE vE nE adder32
+xaddmultF 0 ansE[31:0] outG[15:0] 0#16 ansF[31:0] zF vF nF adder32
+xaddmultG 0 ansF[31:0] outH[14:0] 0#17 ansG[31:0] zG vG nG adder32
+xaddmultH 0 ansG[31:0] outI[13:0] 0#18 ansH[31:0] zH vH nH adder32
+xaddmultI 0 ansH[31:0] outJ[12:0] 0#19 ansI[31:0] zI vI nI adder32
+xaddmultJ 0 ansI[31:0] outK[11:0] 0#20 ansJ[31:0] zJ vJ nJ adder32
+xaddmultK 0 ansJ[31:0] outL[10:0] 0#21 ansK[31:0] zK vK nK adder32
+xaddmultL 0 ansK[31:0] outM[9:0] 0#22 ansL[31:0] zL vL nL adder32
+xaddmultM 0 ansL[31:0] outN[8:0] 0#23 ansM[31:0] zM vM nM adder32
+xaddmultN 0 ansM[31:0] outO[7:0] 0#24 ansN[31:0] zN vN nN adder32
+xaddmultO 0 ansN[31:0] outP[6:0] 0#25 ansO[31:0] zO vO nO adder32
+xaddmultP 0 ansO[31:0] outQ[5:0] 0#26 ansP[31:0] zP vP nP adder32
+xaddmultQ 0 ansP[31:0] outR[4:0] 0#27 ansQ[31:0] zQ vQ nQ adder32
+xaddmultR 0 ansQ[31:0] outS[3:0] 0#28 ansR[31:0] zR vR nR adder32
+xaddmultS 0 ansR[31:0] outT[2:0] 0#29 ansS[31:0] zS vS nS adder32
+xaddmultT 0 ansS[31:0] outU[1:0] 0#30 ansT[31:0] zT vT nT adder32
+xaddmultU 0 ansT[31:0] outV[0] 0#31 multout[31:0] zU vU nU adder32
+.ends
